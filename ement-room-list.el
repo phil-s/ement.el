@@ -690,8 +690,14 @@ DISPLAY-BUFFER-ACTION is nil, the buffer is not displayed."
                   roomlist-markers)
               (cl-flet* ((store-marker (m)
                                        (when (markerp m)
-                                         (push (cons m (marker-position m))
-                                               roomlist-markers)))
+                                         (let (mdata) ;; (MARKER POS SECTION-IDENT)
+                                           (save-excursion
+                                             (goto-char m)
+                                             (when-let ((s (magit-current-section)))
+                                               (push (magit-section-ident s) mdata))
+                                             (push (marker-position m) mdata)
+                                             (push m mdata)
+                                             (push mdata roomlist-markers)))))
                          (doit (win)
                                ;; See (info "(elisp) Quitting Windows") and function
                                ;; `display-buffer-record-window' about the `quit-restore'
@@ -718,8 +724,13 @@ DISPLAY-BUFFER-ACTION is nil, the buffer is not displayed."
                   ;; :blank-between-depth bufler-taxy-blank-between-depth
                   :initial-depth 0))
               ;; Restore the original positions of the known markers.
-              (dolist (mpos roomlist-markers)
-                (set-marker (car mpos) (cdr mpos))))
+              (dolist (mdata roomlist-markers)
+                (cl-destructuring-bind (m pos &optional section-ident)
+                    mdata
+                  (if-let* ((section-ident)
+                            (section (magit-get-section section-ident)))
+                      (set-marker m (oref section start))
+                    (set-marker m pos)))))
             ;; Restore point.
             (if-let* ((section-ident)
                       (section (magit-get-section section-ident)))
