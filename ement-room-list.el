@@ -686,36 +686,7 @@ DISPLAY-BUFFER-ACTION is nil, the buffer is not displayed."
             ;; regarding deleting the text around a marker’s position.
             (setq-local switch-to-buffer-preserve-window-point nil)
             ;; Capture the current positions of known internal markers.
-            (let ((roomlist (current-buffer))
-                  roomlist-markers)
-              (cl-flet* ((store-marker (m)
-                                       (when (markerp m)
-                                         (let (mdata) ;; (MARKER POS SECTION-IDENT)
-                                           (save-excursion
-                                             (goto-char m)
-                                             (when-let ((s (magit-current-section)))
-                                               (push (magit-section-ident s) mdata))
-                                             (push (marker-position m) mdata)
-                                             (push m mdata)
-                                             (push mdata roomlist-markers)))))
-                         (doit (win)
-                               ;; See (info "(elisp) Quitting Windows") and function
-                               ;; `display-buffer-record-window' about the `quit-restore'
-                               ;; parameter.
-                               (when-let* ((qr (window-parameter win 'quit-restore))
-                                           ((eq (car qr) 'other))
-                                           (obuffer (nth 1 qr))
-                                           ((eq (nth 0 obuffer) roomlist)))
-                                 (store-marker (nth 2 obuffer)))
-                               ;; Deal with `window-prev-buffers' used by
-                               ;; `select-prev-buffer' and `select-next-buffer'.
-                               ;; See Emacs bug#64911.
-                               (let ((prevbufs (window-prev-buffers win)))
-                                 (dolist (bufdata prevbufs)
-                                   (when (eq (car bufdata) roomlist)
-                                     (store-marker (cadr bufdata))
-                                     (store-marker (caddr bufdata)))))))
-                (walk-windows #'doit t t))
+            (let ((roomlist-markers (ement-room-list--get-markers)))
               ;; Before this point, no changes have been made to the buffer's contents.
               (delete-all-overlays)
               (erase-buffer)
@@ -724,17 +695,13 @@ DISPLAY-BUFFER-ACTION is nil, the buffer is not displayed."
                   ;; :blank-between-depth bufler-taxy-blank-between-depth
                   :initial-depth 0))
               ;; Restore the original positions of the known markers.
-              (dolist (mdata roomlist-markers)
-                (cl-destructuring-bind (m pos &optional section-ident)
-                    mdata
-                  (if-let* ((section-ident)
-                            (section (magit-get-section section-ident)))
-                      (set-marker m (oref section start))
-                    (set-marker m pos)))))
+              ;; (ement-room-id (aref (oref (magit-current-section) value) 0))
+              (ement-room-list--set-markers roomlist-markers))
             ;; Restore point.
             (if-let* ((section-ident)
                       (section (magit-get-section section-ident)))
                 (goto-char (oref section start))
+              ;; (message "Using fall-back for original section-ident code.")
               (goto-char pos))))
         (when display-buffer-action
           (when-let ((window (display-buffer buffer-name display-buffer-action)))
@@ -748,6 +715,120 @@ DISPLAY-BUFFER-ACTION is nil, the buffer is not displayed."
         ;; NOTE: In order for `bookmark--jump-via' to work properly, the restored buffer
         ;; must be set as the current buffer, so we have to do this explicitly here.
         (set-buffer buffer-name)))))
+
+(defun ement-room-list--get-markers ()
+  "Data for known internal-use markers for the room list buffer.
+
+Each list item has the form (MARKER POS &optional SECTION-IDENT ROOM-ID)."
+  ;; TODO: What happens when a refresh takes place with no network?
+  ;; Is *that* a scenario for set-window-point(0) still happening?
+  ;; (Purely circumstantial evidence; might be nothing.)
+  (let ((roomlist (current-buffer))
+        roomlist-markers)
+    (cl-flet* ((store-marker (m)
+                 (when (markerp m)
+                   (let (mdata)
+                     (save-excursion
+                       (goto-char m)
+                       (when-let ((csection (magit-current-section)))
+                         (when-let ((value (oref csection value))
+                                    ((vectorp value))
+                                    (sectionvalue0 (aref value 0))
+                                    ((ement-room-p sectionvalue0)))
+                           (push (ement-room-id sectionvalue0) mdata))
+                         (push (magit-section-ident csection) mdata))
+                       (push (marker-position m) mdata)
+                       (push m mdata)
+                       ;; (MARKER POS SECTION-IDENT ROOM-ID)
+                       (push mdata roomlist-markers)))))
+               (doit (win)
+                 ;; See (info "(elisp) Quitting Windows") and function
+                 ;; `display-buffer-record-window' about the `quit-restore'
+                 ;; parameter.
+                 (when-let* ((qr (window-parameter win 'quit-restore))
+                             ((eq (car qr) 'other))
+                             (obuffer (nth 1 qr))
+                             ((eq (nth 0 obuffer) roomlist)))
+                   (store-marker (nth 2 obuffer)))
+                 ;; Deal with `window-prev-buffers' used by
+                 ;; `select-prev-buffer' and `select-next-buffer'.
+                 ;; See Emacs bug#64911.
+                 (let ((prevbufs (window-prev-buffers win)))
+                   (dolist (bufdata prevbufs)
+                     (when (eq (car bufdata) roomlist)
+                       (store-marker (cadr bufdata))
+                       (store-marker (caddr bufdata)))))))
+      (walk-windows #'doit t t))
+    ;; FIXME: Oh. Hm. That is only the current live windows.  Do I actually need to
+    ;; process ALL windows (past or present)?? The likes of `winner' can restore past
+    ;; windows to live status, after all, yes?  We're dealing with markers held in
+    ;; window-parameters or other window-specific locations... when we rebuild the room
+    ;; list buffer, *every* window (live or dead) with such associated markers will have
+    ;; those sent back to position 1.  And so if one of those non-live windows
+    ;; subsequently *becomes* live, the associated markers are (long since) back at
+    ;; position 1.
+    ;;
+    ;; We can use `window-configuration-change-hook' to set window parameters:
+    ;; (setf (window-parameter WINDOW 'PARAM) 'VALUE)
+    ;;
+    ;; Does that help?  I need to know *every* window which has ever had room list
+    ;; markers.  So... setting a window parameter any time a window displays the room list
+    ;; buffer can identify that.  Or adding the window to a list at that time for
+    ;; iteration over later.  Or finding the markers and permanently adding *those* to a
+    ;; list.  That will just accumulate vast numbers of markers over time, yes?  And every
+    ;; time we refresh we need to process each and every one of them?!  Otherwise we lose
+    ;; the ability to know their intended value if they ever come back into use.
+    ;;
+    ;; Maybe we store (MARKER POS ROOM-ID) for each.  I think SECTION-IDENT is too big
+    ;; (and too temporary) to store permanently, but the other info isn't.  But does doing
+    ;; that prevent the markers from *ever* being garbage-collected?  We need "weak
+    ;; references" to avoid that trap, don't we?  That would be a hash table of marker
+    ;; data, then.  See `make-hash-table' for details.  We then `maphash' over the table
+    ;; to process all known markers.  We would use markers as weak keys in this instance.
+    ;;
+    ;; If we're still using room-ids at this point, we may be looking at a LOT of section
+    ;; checks.  So maybe we flip it -- iterate once over the rebuilt room list, mapping
+    ;; each room-id to its position, and then use that map to rapidly set all of the known
+    ;; markers based on the room-id data we've stored for them.
+    ;;
+    ;; The update process might be something like:
+    ;; 1. Iterate over room list, mapping every room-id to its section start pos.
+    ;; 2. `maphash' over marker data, building a new map of room-id => marker list.
+    ;; 3. Iterate over those room-ids, updating every marker in its list to the pos
+    ;;    obtained for that room in the first step.
+    ;;
+    ;; (We could do steps 2 and 3 in a single pass, but it feels like we'll spend fewer
+    ;; cycles looking up room-id positions from the initial mapping if we break it into
+    ;; two.  That's purely a guess, though, so benchmarking would be great.)
+    roomlist-markers))
+
+(defun ement-room-list--set-markers (roomlist-markers)
+  "Update the known markers with their appropriate positions."
+  (dolist (mdata roomlist-markers)
+    (cl-destructuring-bind (m pos &optional section-ident room-id)
+        mdata
+      (if-let* ((section-ident)
+                (section (magit-get-section section-ident)))
+          (setq pos (oref section start))
+        (message "Looking for section for room %S." room-id)
+        (if room-id
+            (save-excursion
+              (goto-char (point-min))
+              (catch 'found
+                (while (not (eobp))
+                  (when-let* ((csection (magit-section-at))
+                              (value (oref csection value))
+                              ((vectorp value))
+                              (sectionvalue0 (aref value 0))
+                              ((ement-room-p sectionvalue0)))
+                    (when (eq sectionvalue0 room-id)
+                      (setq pos (oref section start))
+                      (message "Found at pos %d" pos)
+                      (throw 'found t)))
+                  (forward-line 1))))
+          (message "Falling back to POS %d for %S."
+                   pos (or room-id section-ident))))
+      (set-marker m pos))))
 
 (cl-defun ement-room-list-side-window (&key (side 'left))
   "Show room list in side window on SIDE.
