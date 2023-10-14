@@ -124,7 +124,20 @@ Used to, e.g. call `ement-room-compose-org'.")
 (declare-function ement-notify-switch-to-mentions-buffer "ement-notify")
 (declare-function ement-notify-switch-to-notifications-buffer "ement-notify")
 (defvar ement-room-mode-map
-  (let ((map (make-sparse-keymap)))
+  (let ((map (make-sparse-keymap))
+        (prefixes '(("M-g" . "switching")
+                    ("s" . "messages")
+                    ("u" . "users")
+                    ("r" . "room")
+                    ("R" . "membership"))))
+    ;; Use symbols for prefix maps so that `which-key' can display their names.
+    (dolist (prefix prefixes)
+      (let ((cmd (make-symbol (cdr prefix)))
+            (submap (make-sparse-keymap)))
+        (fset cmd submap)
+        (define-key map (kbd (car prefix)) cmd)))
+
+    ;; Menu
     (define-key map (kbd "?") #'ement-room-transient)
 
     ;; Movement
