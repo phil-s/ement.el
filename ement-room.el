@@ -123,6 +123,10 @@ Used to, e.g. call `ement-room-compose-org'.")
 (declare-function ement-room-list "ement-room-list.el")
 (declare-function ement-notify-switch-to-mentions-buffer "ement-notify")
 (declare-function ement-notify-switch-to-notifications-buffer "ement-notify")
+
+(defvar ement-room-mode-self-insert-keymap (make-sparse-keymap)
+  "The `ement-room-mode' keymap under `ement-room-self-insert-mode'.")
+
 (defvar ement-room-mode-map
   (let ((map (make-sparse-keymap))
         (prefixes '(("M-g" . "switching")
@@ -472,6 +476,100 @@ See also `ement-room-compose-buffer-auto-scale' and
 `ement-room-compose-buffer-auto-scale-min-height'."
   :type '(choice (const :tag "Default" nil)
                  (natnum :tag "Lines")))
+
+(defvar ement-room-mode-map)
+(defvar ement-room-self-insert-mode)
+(defvar ement-room-self-insert-chars)
+(defun ement-room-self-insert-chars-update (&optional option value)
+  "Setter function for `ement-room-self-insert-chars'.
+Rebuilds `ement-room-mode-self-insert-keymap'."
+  ;; Update the variable.
+  (when option
+    (set-default-toplevel-value option value))
+  ;; Update `ement-room-mode-self-insert-keymap'.
+  (setq ement-room-mode-self-insert-keymap
+        (let ((map (make-sparse-keymap)))
+          ;; Make `self-insert-command' start a new message.
+          (define-key map [remap self-insert-command]
+                      #'ement-room-self-insert-new-message)
+          ;; Ensure that `ement-room-self-insert-chars' do the same.
+          (dolist (range ement-room-self-insert-chars)
+            (if (consp range)
+                ;; Process a range the same way that `global-map' does.
+                (let ((vec1 (make-vector 1 nil))
+                      (from (car range))
+                      (to (cdr range)))
+                  (while (<= from to)
+                    (aset vec1 0 from)
+                    (define-key map vec1 #'ement-room-self-insert-new-message)
+                    (setq from (1+ from))))
+              ;; A single character.
+              (define-key map (vector range) #'ement-room-self-insert-new-message)))
+          ;; Handle certain other commands the same way.
+          (dolist (cmd '(yank))
+            (define-key map (vector 'remap cmd)
+                        #'ement-room-self-insert-new-message))
+          ;; Provide access to `ement-room-mode-map' via a prefix binding.
+          (when (bound-and-true-p ement-room-mode-map-prefix-key)
+            (define-key map ement-room-mode-map-prefix-key ement-room-mode-map))
+          ;; Add non-conflicting top-level bindings from `ement-room-mode-map'.
+          ;; We could `set-keymap-parent' instead (which works perfectly in most
+          ;; respects); but if we do that then `describe-keymap' continues to
+          ;; show inaccessible bindings in the parent keymap which is very
+          ;; confusing (Emacs bug#66792).
+          (cl-flet ((inherit-from (key definition)
+		      (unless (and (characterp key)
+                                   (lookup-key map (vector key)))
+		        (define-key map (vector key) definition))))
+            (map-keymap #'inherit-from ement-room-mode-map))
+          ;; Return the new keymap.
+          map))
+  ;; Update `ement-room-mode-effective-keymap'.
+  (when (fboundp 'ement-room-self-insert-mode)
+    (ement-room-self-insert-mode ement-room-self-insert-mode)))
+
+(defcustom ement-room-self-insert-chars
+  '((33 . 62) (64 . 126))
+  "Characters handled by `ement-room-self-insert-mode'.
+
+These are in addition to any `self-insert-command' key bindings
+-- this list is to ensure that certain keys will be treated this
+way even when they have `ement-room-mode-map' bindings.
+
+Cons cell elements represent the range from the car to the cdr
+\(inclusive).  The default value covers the common \"printable\"
+ASCII characters excluding SPC (32), ? (63), and DEL (127).
+
+Customizing this option updates `ement-room-mode-self-insert-keymap'
+via the setter function `ement-room-self-insert-chars-update'."
+  :type '(repeat (choice (character :tag "Character")
+                         (cons :tag "Character range"
+                               (character :tag "From")
+                               (character :tag "To"))))
+  :set #'ement-room-self-insert-chars-update)
+
+(defvar ement-room-mode-map-prefix-key)
+(defun ement-room-mode-map-prefix-key-update (&optional option value)
+  "Setter function for `ement-room-mode-map-prefix-key'."
+  ;; Remove the previous prefix binding.
+  (when (bound-and-true-p ement-room-mode-map-prefix-key)
+    (define-key ement-room-mode-self-insert-keymap
+                ement-room-mode-map-prefix-key nil))
+  ;; Set the new value.
+  (when option
+    (set-default-toplevel-value option value))
+  ;; Add the new prefix binding.
+  (define-key ement-room-mode-self-insert-keymap
+              ement-room-mode-map-prefix-key ement-room-mode-map))
+
+(defcustom ement-room-mode-map-prefix-key (kbd "DEL")
+  "A prefix key sequence to access `ement-room-mode-map'.
+Active when `ement-room-self-insert-mode' is enabled.
+
+The default key is DEL."
+  :type 'key-sequence
+  :set-after '(ement-room-self-insert-chars)
+  :set #'ement-room-mode-map-prefix-key-update)
 
 (defvar ement-room-sender-in-left-margin nil
   "Whether sender is shown in left margin.
@@ -2198,6 +2296,7 @@ the previously oldest event."
       ;; We don't really care about the response, I think.
       :then #'ignore)))
 
+(defvar ement-room-mode-effective-keymap)
 (define-derived-mode ement-room-mode fundamental-mode
   `("Ement-Room"
     (:eval (unless (map-elt ement-syncs ement-session)
@@ -2207,7 +2306,10 @@ the previously oldest event."
   "Major mode for Ement room buffers.
 This mode initializes a buffer to be used for showing events in
 an Ement room.  It kills all local variables, removes overlays,
-and erases the buffer."
+and erases the buffer.
+
+\\{ement-room-mode-effective-keymap}"
+  (use-local-map ement-room-mode-effective-keymap)
   (let ((inhibit-read-only t))
     (erase-buffer))
   (remove-overlays)
@@ -2236,6 +2338,43 @@ and erases the buffer."
                                          dnd-protocol-alist)))
 
 (add-hook 'ement-room-mode-hook 'visual-line-mode)
+
+(defvar ement-room-mode-effective-keymap
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map ement-room-mode-map)
+    map)
+  "The actual keymap used in `ement-room-mode'.
+
+This keymap reflects the state of `ement-room-self-insert-mode',
+with `ement-room-mode-map' bindings being available directly or
+under the prefix `ement-room-mode-map-prefix-key'.")
+
+;;;###autoload
+(define-minor-mode ement-room-self-insert-mode
+  "When enabled, `self-insert-command' keys begin a new message.
+
+The shadowed key bindings in `ement-room-mode-map' are accessed
+via `ement-room-mode-map-prefix-key'.
+
+See also `ement-room-self-insert-chars'."
+  :init-value nil
+  :global t
+  :keymap nil
+  ;; Make the local keymap used by `ement-room-mode' reflect the state of
+  ;; `ement-room-self-insert-mode'.
+  (set-keymap-parent ement-room-mode-effective-keymap
+                     (if ement-room-self-insert-mode
+                         ement-room-mode-self-insert-keymap
+                       ement-room-mode-map)))
+
+(defun ement-room-self-insert-new-message ()
+  "Start writing a message from a `self-insert-command' event."
+  (interactive)
+  ;; Re-issue the event which triggered this command.
+  ;; (Typically a `self-insert-command' key binding.)
+  (seq-doseq (key (reverse (this-command-keys-vector)))
+    (push key unread-command-events))
+  (call-interactively #'ement-room-dispatch-new-message))
 
 (defun ement-room-read-string (prompt &optional initial-input history default-value inherit-input-method)
   "Call `read-from-minibuffer', binding variables and keys for Ement.
@@ -4031,6 +4170,13 @@ a copy of the local keymap, and sets `header-line-format'."
   (use-local-map (if (current-local-map)
                      (copy-keymap (current-local-map))
                    (make-sparse-keymap)))
+  (local-set-key [remap delete-backward-char]
+                 `(menu-item "" ement-room-compose-abort
+                             :filter ,(lambda (cmd)
+                                        (and ement-room-self-insert-mode
+                                             (<= (buffer-size) 1)
+                                             (save-restriction (widen) (eobp))
+                                             cmd))))
   (local-set-key [remap save-buffer] #'ement-room-dispatch-send-message)
   (local-set-key (kbd "C-c C-k") #'ement-room-compose-abort)
   (setq header-line-format
