@@ -4193,7 +4193,9 @@ HTML is rendered to Emacs text using `shr-insert-document'."
     (when body
       (cl-macrolet ((matches-body-p
                       (form) `(when-let ((string ,form))
-                                (string-match-p (regexp-quote string) body))))
+                                (string-match-p
+                                 (concat "\\b" (regexp-quote string) "\\b")
+                                 body))))
         (or (matches-body-p (ement-user-username user))
             (matches-body-p (ement--user-displayname-in room user))
             (matches-body-p (ement-user-id user)))))))
