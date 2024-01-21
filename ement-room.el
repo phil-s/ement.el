@@ -4124,15 +4124,20 @@ height."
   (let* ((pos (event-start event))
          (window (posn-window pos)))
     (with-selected-window window
-      (ement-room-image-scale (posn-point pos)))))
+      ;; Any prefix arg has been demoted to `last-prefix-arg' by this point.
+      (ement-room-image-scale (posn-point pos) last-prefix-arg))))
 
-(defun ement-room-image-scale (pos)
+(defun ement-room-image-scale (pos &optional scale)
   "Toggle scale of image at POS.
 Scale image to fit the window body.  If the image already fits
 the window body, reduce its max-height in accordance with user
 options `ement-room-image-thumbnail-height' and
-`ement-room-image-thumbnail-height-min'."
-  (interactive "d")
+`ement-room-image-thumbnail-height-min'.
+
+With a prefix argument, scale the image to the specified
+percentage of its actual size (if numeric), or prompt for a
+percentage (if not numeric)."
+  (interactive "d\nP")
   (pcase-let* ((image (get-text-property pos 'display))
                (max-height (image-property image :max-height))
                (xy (posn-x-y (posn-at-point pos)))
@@ -4149,23 +4154,35 @@ options `ement-room-image-thumbnail-height' and
                                   ;; Emacs doesn't like floats as the max-height.
                                   (truncate (* window-height
                                                ement-room-image-thumbnail-height))))))
+    ;; ImageMagick support.
     (when (fboundp 'imagemagick-types)
       ;; Only do this when ImageMagick is supported.
       ;; FIXME: When requiring Emacs 27+, remove this (I guess?).
       (setf (image-property image :type) 'imagemagick))
-    ;; Set :scale to nil since image scaling commands might have changed it.
-    (setf (image-property image :scale) nil
-          (image-property image :max-width) max-width
-          (image-property image :max-height) new-height)
-    ;; When maximising, eliminate all padding around the image, so that the line
-    ;; height will not exceed the window height.  This prevents window scrolling
-    ;; issues.  Set the window start to ensure the image is displayed in full.
-    (if use-window-body-size
-        (setf (image-property image :relief) nil
-              (image-property image :margin) nil
-              (window-start) pos)
-      (setf (image-property image :relief) ement-room-image-relief
-            (image-property image :margin) ement-room-image-margin))))
+    (if scale
+        (let ((scale (if (consp scale)
+                         (read-number "Scale (% of original): " 100
+                                      'read-number-history)
+                       scale)))
+          (unless (cl-plusp scale)
+            (error "Not a positive number: %s" scale))
+          (setf (image-property image :scale) (/ scale 100.0)
+                (image-property image :max-width) nil
+                (image-property image :max-height) nil))
+      ;; Otherwise we are toggling between the initial height and the window-height.
+      ;; Set :scale to nil since image scaling commands might have changed it.
+      (setf (image-property image :scale) nil
+            (image-property image :max-width) max-width
+            (image-property image :max-height) new-height)
+      ;; When maximising, eliminate all padding around the image, so that the line
+      ;; height will not exceed the window height.  This prevents window scrolling
+      ;; issues.  Set the window start to ensure the image is displayed in full.
+      (if use-window-body-size
+          (setf (image-property image :relief) nil
+                (image-property image :margin) nil
+                (window-start) pos)
+        (setf (image-property image :relief) ement-room-image-relief
+              (image-property image :margin) ement-room-image-margin)))))
 
 (defun ement-room-image-show-mouse (event)
   "Show image at mouse EVENT in a new buffer."
