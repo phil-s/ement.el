@@ -300,6 +300,8 @@ Ement.el doesn't support encrypted rooms natively, but it can be used transparen
 + Customization group ~ement-room-list~.
 + Option ~ement-room-list-space-prefix~ is applied to space names in the room list (e.g. set to empty string for cleaner appearance).
 + Option ~ement-room-reaction-names-limit~ sets how many senders of a reaction are shown in the buffer (more than that many are shown in the tooltip).
++ Option ~ement-room-image-margin~ is the number of pixels of margin around image thumbnails.
++ Option ~ement-room-image-relief~ is the number of pixels of shadow rectangle around image thumbnails.
 
 *Changes*
 
@@ -308,6 +310,7 @@ Ement.el doesn't support encrypted rooms natively, but it can be used transparen
 *Fixes*
 
 + Insertion of sender headers (when using "Elemental" message format).  (Refactoring contributed by [[https://github.com/Stebalien][Steven Allen]].)
++ Toggling images to fill the window body no longer triggers unintended scrolling.  (Thanks to [[https://github.com/phil-s][Phil Sainty].)
 
 ** 0.13
 
