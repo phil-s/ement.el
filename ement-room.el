@@ -252,6 +252,7 @@ makes a best effort to keep it accurate.")
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map minibuffer-local-map)
     (define-key map (kbd "C-c '") #'ement-room-compose-from-minibuffer)
+    (define-key map (kbd "TAB") #'complete-symbol)
     map)
   "Keymap used in `ement-room-read-string'.")
 
@@ -2707,7 +2708,9 @@ see."
           (setq-local completion-at-point-functions
                       '(ement-room--complete-members-at-point ement-room--complete-rooms-at-point))
           (visual-line-mode 1)
-          (run-hooks 'ement-room-read-string-setup-hook))
+          (run-hooks 'ement-room-read-string-setup-hook)
+          (setq-local tab-always-indent 'complete
+                      tab-first-completion t))
       (read-from-minibuffer prompt initial-input ement-room-minibuffer-map
                             nil history default-value inherit-input-method))))
 
@@ -4503,7 +4506,9 @@ a copy of the local keymap, and sets `header-line-format'."
   (setf ement-room-compose-buffer t)
   (setq-local completion-at-point-functions
               (append '(ement-room--complete-members-at-point ement-room--complete-rooms-at-point)
-                      completion-at-point-functions))
+                      completion-at-point-functions)
+              tab-always-indent 'complete
+              tab-first-completion t)
   (setq-local dabbrev-select-buffers-function #'ement-compose-dabbrev-select-buffers
               dabbrev-friend-buffer-function #'ement-room-mode-p)
   (setq-local yank-excluded-properties
@@ -4524,6 +4529,7 @@ a copy of the local keymap, and sets `header-line-format'."
                                              (save-restriction (widen) (eobp))
                                              cmd))))
   (local-set-key [remap save-buffer] #'ement-room-dispatch-send-message)
+  ;; (local-set-key (kbd "TAB") #'indent-for-tab-command)
   (local-set-key (kbd "C-c C-k") #'ement-room-compose-abort)
   (local-set-key (kbd "M-p") #'ement-room-compose-history-prev-message)
   (local-set-key (kbd "M-n") #'ement-room-compose-history-next-message)
