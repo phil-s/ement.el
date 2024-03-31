@@ -582,6 +582,20 @@ See also `set-window-dedicated-p' and
                 (const :tag "Newly-created windows" created)
                 (const :tag "When auto-height enabled" auto-height)))
 
+(defcustom ement-room-compose-buffer-window-dedicated-flag t
+  "How \"dedicated\" compose buffer windows should be.
+
+If option `ement-room-compose-buffer-window-dedicated' causes
+a compose buffer window to be dedicated, this value determines
+whether or not it will be \"strongly\" dedicated.
+
+Specifically, this value is used as the FLAG argument to
+`set-window-dedicated-p' (see which)."
+  ;; Any non-nil and non-t value is "normally" dedicated.
+  :type '(radio (const :tag "Strongly dedicated" t)
+                (const :tag "Dedicated" dedicated)
+                (const :tag "Not dedicated" nil)))
+
 (defcustom ement-room-compose-buffer-window-auto-height t
   "Dynamically match the compose buffer window height to its contents.
 See also `ement-room-compose-buffer-window-auto-height-max' and
@@ -4767,7 +4781,8 @@ See also `ement-room-compose-buffer-window-state-change-handler'."
                 (auto-height ement-room-compose-buffer-window-auto-height)
                 (delete nil)
                 (t ement-room-compose-buffer-window-dedicated))
-          (set-window-dedicated-p win t))))))
+          (set-window-dedicated-p
+           win ement-room-compose-buffer-window-dedicated-flag))))))
 
 (defun ement-room-compose-buffer-quit-restore-window ()
   "Kill the current compose buffer and deal appropriately with its window.
