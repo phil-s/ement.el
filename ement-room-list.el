@@ -842,19 +842,116 @@ Sets `ement-room-list-visibility-cache' to the value of
   (ignore-errors
     (when magit-section-visibility-cache
       (setf ement-room-list-visibility-cache magit-section-visibility-cache))))
+(defvar ement-room-list--show-debug-messages t)
+
+(defun ement-room-list--debug-message (&rest args)
+  (when ement-room-list--show-debug-messages
+    (apply #'message args)))
+
+(defcustom ement-room-list-update-interval 5
+  "Minimum seconds between `ement-room-list-auto-update' refreshes.
+If nil, then refresh immediately upon each sync.
+
+In either case this is further subject to `ement-room-list-update-idle-delay'."
+  :type '(choice (const :tag "Refresh immediately upon sync" nil)
+                 (number :tag "Minimum seconds between refreshes")))
+
+(defcustom ement-room-list-update-idle-delay 1
+  "Necessary idle time before any `ement-room-list-auto-update' refresh.
+If nil, then refresh immediately."
+  :type '(choice (const :tag "Refresh immediately" nil)
+                 (number :tag "Wait until idle for this many seconds")))
+
+(defvar ement-room-list--timer
+  (let ((timer (timer-create)))
+    (timer-set-function timer #'ement-room-list-update)
+    (timer-set-time timer (current-time))
+    timer))
+
+(defvar ement-room-list--idle-timer
+  (let ((timer (timer-create)))
+    (timer-set-function timer #'ement-room-list--update-internal)
+    timer))
+
+(defvar ement-room-list--latest (current-time))
 
 ;;;###autoload
-(defun ement-room-list-auto-update (_session)
+(defun ement-room-list-auto-update (&optional _session)
   "Automatically update the Taxy room list buffer.
 +Does so when variable `ement-room-list-auto-update' is non-nil.
 +To be called in `ement-sync-callback-hook'."
-  (when (and ement-room-list-auto-update
-             (buffer-live-p (get-buffer "*Ement Room List*")))
-    (with-current-buffer (get-buffer "*Ement Room List*")
-      (unless (region-active-p)
-        ;; Don't refresh the list if the region is active (e.g. if the user is trying to
-        ;; operate on multiple rooms).
-        (revert-buffer)))))
+  (when ement-room-list-auto-update
+    (if (not ement-room-list-update-interval)
+        (progn
+          (ement-room-list--debug-message "No interval; updating immediately.")
+          (ement-room-list-update))
+      ;; Require a minimum duration between updates.
+      (let* ((elapsed (time-to-seconds (time-since ement-room-list--latest)))
+             (delay (- ement-room-list-update-interval elapsed)))
+        (ement-room-list--debug-message "Time since last refresh: %.2f seconds; Delay for %.2f seconds." elapsed delay)
+        (if (<= delay 0)
+            (progn
+              (ement-room-list--debug-message "No delay; updating immediately.")
+              (ement-room-list-update))
+          ;; Not enough time has elapsed since the last refresh, but this may
+          ;; not be the first sync in the interim, so also check the timer --
+          ;; if it is already set to trigger in the future, we don't need to
+          ;; do anything.
+          (let ((tminus (timer-until ement-room-list--timer (current-time))))
+            (if (< tminus 0)
+                (ement-room-list--debug-message "Timer scheduled to run in %.2f seconds." (- tminus))
+              (ement-room-list--debug-message "Timer last ran %.2f seconds ago." tminus))
+            (unless (< tminus 0)
+              (ement-room-list--debug-message "Scheduling timer for %.2f seconds from now." delay)
+              ;; The timer's activation time is in the past, so re-schedule it
+              ;; in the future (based on the remaining delay), and activate it.
+              (timer-set-time ement-room-list--timer (time-add nil delay))
+              (timer-activate ement-room-list--timer))))))))
+
+(defun ement-room-list-update ()
+  "Update the Taxy room list buffer.
+If `ement-room-list-update-idle-delay' is non-nil then wait until that
+many seconds of idle time before performing the update; otherwise
+update the buffer immediately."
+  (if (not ement-room-list-update-idle-delay)
+      (progn
+        (ement-room-list--debug-message "No idle delay; updating immediately.")
+        (ement-room-list--update-internal))
+    ;; Arrange to call `ement-room-list-update' in idle time.
+    (when (memq ement-room-list--idle-timer timer-idle-list)
+      (ement-room-list--debug-message "Idle update already pending; doing nothing."))
+    (unless (memq ement-room-list--idle-timer timer-idle-list)
+      (ement-room-list--debug-message "Scheduling update following %.2f seconds idle."
+                                      ement-room-list-update-idle-delay)
+      (timer-set-idle-time ement-room-list--idle-timer
+                           ement-room-list-update-idle-delay)
+      (timer-activate-when-idle ement-room-list--idle-timer t))))
+
+(defun ement-room-list--update-internal ()
+  "Update the Taxy room list buffer."
+  (ement-room-list--debug-message "Actual update (maybe).")
+  (let ((buf (get-buffer "*Ement Room List*")))
+    (when (buffer-live-p buf)
+      (with-current-buffer buf
+        (if (get-buffer-window buf)
+            (unless (region-active-p)
+              (ement-room-list--debug-message "Updating!")
+              ;; Don't refresh the list if the region is active
+              ;; (e.g. if the user is trying to operate on multiple rooms).
+              (setf ement-room-list--latest (current-time))
+              (revert-buffer))
+          ;; Arrange to refresh when the buffer is next displayed.
+          (ement-room-list--debug-message "Arranging to refresh when the buffer is next displayed.")
+          (add-hook 'window-configuration-change-hook
+                    #'ement-room-list-update-upon-display nil :local))))))
+
+(defun ement-room-list-update-upon-display ()
+  "Call `ement-room-list-update' when the room list is next displayed.
+Used in buffer-local `window-configuration-change-hook'."
+  (ement-room-list--debug-message "Buffer displayed; update ASAP.")
+  (remove-hook 'window-configuration-change-hook
+               #'ement-room-list-update-upon-display :local)
+  (ement-room-list-update))
 
 (defun ement-room-list--timestamp-colors ()
   "Return a vector of generated latest-timestamp colors for rooms.
