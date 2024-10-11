@@ -860,6 +860,7 @@ non-nil, set the variables buffer-locally (i.e. when called from
         (message "Ement: Kill and reopen room buffers to display in new format")))))
 
 (defcustom ement-room-message-format-spec "%S%L%B%r%R%t"
+  ;; Formatter definitions: (occur "(\\ement-room-define-event-formatter")
   "Format messages according to this spec.
 It may contain these specifiers:
 
@@ -4007,6 +4008,8 @@ Formats according to `ement-room-message-format-spec', which see."
 (cl-defun ement-room--format-message (event room session &optional (format ement-room-message-format-spec))
   "Return EVENT in ROOM on SESSION formatted according to FORMAT.
 Format defaults to `ement-room-message-format-spec', which see."
+  ;; Formatter definitions: (occur "(\\ement-room-define-event-formatter")
+  ;;
   ;; Bind this locally so formatters can modify it for this call.
   (let ((ement-room--format-message-margin-p)
         (left-margin-width ement-room-left-margin-width)
