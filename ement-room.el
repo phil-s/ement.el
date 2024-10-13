@@ -2457,7 +2457,6 @@ See also `ement-room-report-content-score-default'."
         ((and (cl-type (integer -100 0)) it)
          ;; Hey, look, my pcase cl-type patch is useful!
          it)
-        (`nil nil)
         (_ (user-error "Invalid score (must be -100 to 0)"))))))
   
 (defun ement-room--report-content-interactive ()
