@@ -2498,15 +2498,6 @@ message is displayed upon success."
       (setq then (lambda (_data)
                    (message "Content reported."))))
     (setq callbacks (list :then then))
-
-    ;; TODO: Probably need an ELSE handler for the 404 responses.
-    ;;
-    ;; 200: The event has been reported successfully.
-    ;;
-    ;; 404: The event was not found or you are not joined to the room where the event
-    ;;      resides.  Homeserver implementations can additionally return this error if
-    ;;      the reported event has been redacted.
-
     (when else
       (setq callbacks (append (list :else else) callbacks)))
     (apply #'ement-api session endpoint
