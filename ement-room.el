@@ -2704,6 +2704,8 @@ To be used in `ement-room-view-hook', which see."
         (ement-event data)
         (otherwise (user-error "No event at point"))))))
 
+(defvar ement-room-latest-timestamp-event-types)
+
 (cl-defun ement-room-retro-callback (room session data
                                           &key (set-prev-batch t))
   "Push new DATA to ROOM on SESSION and add events to room buffer.
@@ -2724,7 +2726,8 @@ before the earliest-seen message)."
                ;; likely very few compared to the number of timeline events, which is
                ;; what the user is interested in (e.g. when loading 1000 earlier
                ;; messages in #emacs:matrix.org, only 31 state events were received).
-               (progress-max-value (* 3 num-events)))
+               (progress-max-value (* 3 num-events))
+               (ts 0))
     ;; NOTE: Put the newly retrieved events at the end of the slots, because they should be
     ;; older events.  But reverse them first, because we're using "dir=b", which the
     ;; spec says causes the events to be returned in reverse-chronological order, and we
@@ -2739,6 +2742,11 @@ before the earliest-seen message)."
     ;; Append state events.
     (cl-loop for event across-ref state
              do (setf event (ement--make-event event))
+             (when (and (> (ement-event-origin-server-ts event) ts)
+                        (or (eq ement-room-latest-timestamp-event-types t)
+                            (member (ement-event-type event)
+                                    ement-room-latest-timestamp-event-types)))
+               (setf ts (ement-event-origin-server-ts event)))
              finally do (setf (ement-room-state room)
                               (append (ement-room-state room) (append state nil))))
     (ement-with-progress-reporter (:reporter ("Ement: Processing earlier events..." 0 progress-max-value))
@@ -2755,13 +2763,21 @@ before the earliest-seen message)."
                     ;; New event.
                     (setf event (ement--make-event event))
                     ;; HACK: Put events on events table.  See FIXME above about using the event hook.
-                    (ement--put-event event nil session))
+                    (ement--put-event event nil session)
+                    (when (and (> (ement-event-origin-server-ts event) ts)
+                               (or (eq ement-room-latest-timestamp-event-types t)
+                                   (member (ement-event-type event)
+                                           ement-room-latest-timestamp-event-types)))
+                      (setf ts (ement-event-origin-server-ts event))))
                (ement-progress-update)
                finally do
                (setf chunk (seq-remove #'null chunk)
                      (ement-room-timeline room) (append (ement-room-timeline room) chunk)))
+      ;; Update room's latest-timestamp slot.
+      (when (> ts (or (ement-room-latest-ts room) 0))
+        (setf (ement-room-latest-ts room) ts))
+      ;; Insert events into the room's buffer.
       (when buffer
-        ;; Insert events into the room's buffer.
         (with-current-buffer buffer
           (save-window-excursion
             ;; NOTE: See note in `ement--update-room-buffers'.
@@ -5563,6 +5579,67 @@ STRUCT should be an `ement-room-membership-events' struct."
                                                            (propertize type 'face 'bold)
                                                            (string-join users ", ")))
                                   "; "))))))))
+
+;; `ement-events-checklist' widget for `ement-room-latest-timestamp-event-types'.
+
+(defun ement-room--known-events ()
+  "Combined list of names of common/known events and observed session events."
+  ;; Without separately persisting a list of session-supplied event names,
+  ;; there's no way to distinguish user-supplied events from session-supplied
+  ;; events (when the latter may vary), and so we make them all checkboxes.
+  ;; This ensures that events which were checkboxes when the user initially
+  ;; customized the list do not later appear in the `editable-list' section
+  ;; of the widget, if the current session does not yet contain those events.
+  ;; This does mean that genuine user-added events end up as checkboxes too,
+  ;; but, of the two approaches, this seemed like the preferable way around.
+  (let (events)
+    (dolist (sess ement-sessions)
+      (dolist (event (hash-table-values (ement-session-events (cdr sess))))
+        (unless (member (ement-event-type event) events)
+          (push (ement-event-type event) events))))
+    (sort
+     (cl-delete-duplicates
+      (append events
+              (and (bound-and-true-p ement-room-latest-timestamp-event-types)
+                   (consp ement-room-latest-timestamp-event-types)
+                   ement-room-latest-timestamp-event-types)
+              '("m.reaction"
+                "m.room.avatar"
+                "m.room.canonical_alias"
+                "m.room.create"
+                "m.room.guest_access"
+                "m.room.history_visibility"
+                "m.room.join_rules"
+                "m.room.member"
+                "m.room.message"
+                "m.room.name"
+                "m.room.power_levels"
+                "m.room.redaction"
+                "m.room.related_groups"
+                "m.room.third_party_invite"
+                "m.room.tombstone"
+                "m.room.topic"
+                "m.space.child"))
+      :test 'equal)
+     #'string-lessp)))
+
+(defun ement-room--events-checklist-convert-widget (widget)
+  "Update the widget with the current known events."
+  (widget-put widget :args (mapcar (lambda (x) (list 'const x))
+                                   (ement-room--known-events)))
+  widget)
+
+(define-widget 'ement-events-checklist 'checklist
+  "Checklist of names of known Matrix events in all current sessions."
+  :convert-widget 'ement-room--events-checklist-convert-widget)
+
+(defcustom ement-room-latest-timestamp-event-types t
+  "Event types which affect the latest timestamp of a room."
+  :type `(choice (const :tag "All events" t)
+                 (list :tag "Specified events"
+                       (ement-events-checklist :inline t :greedy t)
+                       (editable-list :inline t (string :tag "Event"))))
+  :group 'ement-room)
 
 ;;;;; Images
 
