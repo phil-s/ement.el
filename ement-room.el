@@ -5807,8 +5807,9 @@ unauthenticated request to old endpoint."
   (declare (indent defun))
   (pcase-let* (((cl-struct ement-event content) event)
                ((map ('url mxc)) content))
-    (ement--media-request mxc session :then then :else else
-      :queue ement-images-queue :authenticatedp authenticatedp)))
+    (when mxc
+      (ement--media-request mxc session :then then :else else
+        :queue ement-images-queue :authenticatedp authenticatedp))))
 
 (defun ement-room--format-m.image (event session)
   "Return \"m.image\" EVENT on SESSION formatted as a string.
