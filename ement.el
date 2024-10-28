@@ -113,6 +113,7 @@ by users; ones who do so should know what they're doing.")
 ;; From other files.
 (defvar ement-room-avatar-max-width)
 (defvar ement-room-avatar-max-height)
+(defvar ement-room-latest-timestamp-event-types)
 
 ;;;; Customization
 
@@ -740,7 +741,10 @@ Also used for left rooms, in which case STATUS should be set to
                                 do (push event (,accessor room))
                                 (when (ement--sync-messages-p session)
                                   (ement-progress-update))
-                                (when (> (ement-event-origin-server-ts event) ts)
+                                (when (and (> (ement-event-origin-server-ts event) ts)
+                                           (or (eq ement-room-latest-timestamp-event-types t)
+                                               (member (ement-event-type event)
+                                                       ement-room-latest-timestamp-event-types)))
                                   (setf ts (ement-event-origin-server-ts event))))
                        ;; One would think that one should use `maximizing' here, but, completely
                        ;; inexplicably, it sometimes returns nil, even when every single value it's comparing
