@@ -570,7 +570,12 @@ before sending.
 
 The value `compose-buffer' means that the minibuffer is not used --
 messages are written in a compose buffer by default, and \\[save-buffer]
-sends the composed message directly."
+sends the composed message directly.
+
+In room buffers you can start writing a new message using the
+alternative (non-selected) compose method by typing \\<ement-room-mode-map>\
+\\[ement-room-dispatch-new-message-alt] rather
+than \\[ement-room-dispatch-new-message]."
   :type '(choice (const :tag "Minibuffer" minibuffer)
                  (const :tag "Compose buffer" compose-buffer)))
 
@@ -4718,8 +4723,8 @@ Interactively, to event at point."
 
 (defun ement-room-compose-from-minibuffer ()
   "Edit the current message in a compose buffer.
-To be called from a minibuffer opened from
-`ement-room-read-string'."
+To be called from a minibuffer opened from `ement-room-read-string'.
+See also `ement-room-compose-method'."
   (interactive)
   (cl-assert (minibufferp)) (cl-assert ement-room) (cl-assert ement-session)
   ;; TODO: When requiring Emacs 27, use `letrec'.
