@@ -1005,7 +1005,9 @@ If non-nil, plain text message bodies are displayed in a
 variable-pitch font, and `shr-use-fonts' is enabled for rendering
 HTML-formatted message bodies (which includes most replies)."
   :type '(choice (const :tag "Disable variable-pitch fonts" nil)
-                 (const :tag "Enable variable-pitch fonts" t)))
+                 (const :tag "Enable variable-pitch fonts" t))
+  :group 'ement-room
+  :group 'ement-faces)
 
 (defcustom ement-room-username-display-property '(raise -0.25)
   "Display property applied to username strings.
