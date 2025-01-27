@@ -682,6 +682,21 @@ You can use this hook to define any desired custom bindings which
 are not accounted for by those user options."
   :type 'hook)
 
+(defcustom ement-room-mode-self-insert-kill-window 'new
+  "Whether \\[delete-backward-char] should kill an empty compose buffer.
+
+Values are nil=never, t=always, and new=only when it was a new message
+\(i.e. neither editing nor replying, so that you won't need to initiate
+that edit/reply again if you didn't mean to cancel it).
+
+The default value `new' prevents the accident whereby you delete what
+you'd typed so far with the intention of starting it differently, and
+inadvertently start composing a new message which is not an edit or a
+reply."
+  :type '(choice (const :tag "Never" nil)
+                 (const :tag "Always" t)
+                 (const :tag "Not when editing or replying" new)))
+
 (defvar ement-room-self-insert-mode)
 (defvar ement-room-self-insert-chars)
 (defvar ement-room-self-insert-commands)
@@ -2933,6 +2948,12 @@ The user options `ement-room-self-insert-chars' and
 `ement-room-self-insert-commands' determine the specific keys and
 commands which will have this effect.
 
+In addition, typing \\[delete-backward-char] to delete the message
+character-by-character will kill the compose buffer, aborting the
+message, once the sole remaining character is deleted.  This is
+conditional upon `ement-room-mode-self-insert-kill-window', which
+inhibits the behaviour by default when writing edits and replies.
+
 When this mode is enabled, `ement-room-mode-self-insert-keymap'
 takes precedence over `ement-room-mode-map', with the shadowed
 key bindings in `ement-room-mode-map' becoming accessible via
@@ -4898,14 +4919,19 @@ a copy of the local keymap, and sets `header-line-format'."
   (use-local-map (if (current-local-map)
                      (copy-keymap (current-local-map))
                    (make-sparse-keymap)))
-  ;; When `ement-room-self-insert-mode' is enabled, deleting the final character of the
-  ;; message aborts and kills the compose buffer.
+  ;; When `ement-room-self-insert-mode' is enabled, deleting the sole character
+  ;; of the message aborts and kills the compose buffer.
   (local-set-key [remap delete-backward-char]
                  `(menu-item "" ement-room-compose-abort-no-history
                              :filter ,(lambda (cmd)
                                         (and ement-room-self-insert-mode
+                                             ement-room-mode-self-insert-kill-window
                                              (<= (buffer-size) 1)
                                              (save-restriction (widen) (eobp))
+                                             (not (and (or ement-room-editing-event
+                                                           ement-room-replying-to-event)
+                                                       (eq ement-room-mode-self-insert-kill-window
+                                                           'new)))
                                              cmd))))
   (local-set-key [remap save-buffer] #'ement-room-dispatch-send-message)
   ;; (local-set-key (kbd "TAB") #'indent-for-tab-command)
