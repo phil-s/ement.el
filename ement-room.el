@@ -4430,17 +4430,19 @@ If FORMATTED-P, return the formatted body content, when available."
           (setq replied-to-event-id
                 (map-nested-elt (ement-event-content orig-event)
                                 '(m.relates_to m.in_reply_to event_id)))
-        ;; The original event is not found: fetch it and redisplay this event.
-        (ement-api ement-session (format "rooms/%s/event/%s" (ement-room-id ement-room) orig-event-id)
-          :then (ement-room--rich-reply-callback ement-room ement-session event))))
+        ;; ;; The original event is not found: fetch it and redisplay this event.
+        ;; (ement-api ement-session (format "rooms/%s/event/%s" (ement-room-id ement-room) orig-event-id)
+        ;;   :then (ement-room--rich-reply-callback ement-room ement-session event))
+        ))
     (when replied-to-event-id
       ;; Message is a reply, find or fetch the event being replied to.
       (if-let ((replied-to-event (gethash replied-to-event-id (ement-session-events ement-session))))
           ;; Found event in session's events table: use it.
           (setf event-replied-to replied-to-event)
         ;; Replied-to event not found: fetch it and redisplay this event.
-        (ement-api ement-session (format "rooms/%s/event/%s" (ement-room-id ement-room) replied-to-event-id)
-          :then (ement-room--rich-reply-callback ement-room ement-session event))))
+        ;; (ement-api ement-session (format "rooms/%s/event/%s" (ement-room-id ement-room) replied-to-event-id)
+        ;;   :then (ement-room--rich-reply-callback ement-room ement-session event))
+        ))
     (setf body (if (or (not formatted-p) (not formatted-body))
                    ;; FIXME: This should check if the quote is the plain text body but
                    ;; that is not easy...
@@ -4487,12 +4489,18 @@ If FORMATTED-P, return the formatted body content, when available."
       (setf body "[redacted]"))
     body))
 
+(defvar my-ement-room--rich-reply-callback-debug nil)
+
 (defun ement-room--rich-reply-callback (room session event)
   "Return callback function for rich reply in EVENT in ROOM of SESSION."
   (lambda (fetched-event)
     (pcase-let* ((new-event (ement--make-event fetched-event))
                  ((cl-struct ement-room (local (map buffer))) room))
-      (ement--put-event new-event room session)
+      (if (equal event "$cSt6kKOPy7pv-6fVgRS6xkc73KyTu99EnMly436djhc")
+          (let ((my-ement-room--rich-reply-callback-debug t))
+            (ement--put-event new-event room session))
+        (ement--put-event new-event room session)
+        )
       (when (buffer-live-p buffer)
         (with-current-buffer buffer
           (when-let ((node (ement-room--ewoc-last-matching ement-ewoc
