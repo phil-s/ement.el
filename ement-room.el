@@ -5310,29 +5310,31 @@ STRUCT should be an `ement-room-membership-events' struct."
               (and (bound-and-true-p ement-room-latest-timestamp-event-types)
                    (consp ement-room-latest-timestamp-event-types)
                    ement-room-latest-timestamp-event-types)
-              '("m.reaction"
-                "m.room.avatar"
-                "m.room.canonical_alias"
-                "m.room.create"
-                "m.room.guest_access"
-                "m.room.history_visibility"
-                "m.room.join_rules"
-                "m.room.member"
-                "m.room.message"
-                "m.room.name"
-                "m.room.power_levels"
-                "m.room.redaction"
-                "m.room.related_groups"
-                "m.room.third_party_invite"
-                "m.room.tombstone"
-                "m.room.topic"
-                "m.space.child"))
+              '(("m.reaction" . "A reaction to a previous event.")
+                ("m.room.avatar" . "A picture that is associated with the room.")
+                ("m.room.canonical_alias" . "Which room alias is canonical, and which other aliases exist.")
+                ("m.room.create" . "The first event in a room; the root of all other events.")
+                ("m.room.join_rules" . "Requirements for users to join the room.")
+                ("m.room.member" . "Adjusts the room membership state for a user.")
+                ("m.room.message" . "A room message (not limited to text).")
+                ("m.room.name" . "The human-friendly name for the room.")
+                ("m.room.power_levels" . "This event specifies the minimum level a user must have in order to perform a certain action. It also specifies the levels of each user in the room.")
+                ("m.room.redaction" . "Describes which event has been redacted, by whom, and why.")
+                ("m.room.tombstone" . "Signifies that a room has been upgraded to a different room version.")
+                ("m.room.topic" . "A short message detailing what is currently being discussed in the room."))
+              nil)
+      :key (lambda (a) (if (consp a) (car a) a))
       :test 'equal)
-     #'string-lessp)))
+     (lambda (a b)
+       (string-lessp (if (consp a) (car a) a)
+                     (if (consp b) (car b) b))))))
 
 (defun ement-room--events-checklist-convert-widget (widget)
   "Update the widget with the current known events."
-  (widget-put widget :args (mapcar (lambda (x) (list 'const x))
+  (widget-put widget :args (mapcar (lambda (x)
+                                     (if (consp x)
+                                         (list 'const (car x) :tag (cdr x))
+                                       (list 'const x)))
                                    (ement-room--known-events)))
   widget)
 
@@ -5341,7 +5343,19 @@ STRUCT should be an `ement-room-membership-events' struct."
   :convert-widget 'ement-room--events-checklist-convert-widget)
 
 (defcustom ement-room-latest-timestamp-event-types t
-  "Event types which affect the latest timestamp of a room."
+  "Event types which affect the latest timestamp of a room.
+
+The room list buffer's \"Latest\" column reflects the most recent
+matching event in the current session.
+
+Note that there is no fixed set of valid event names.  The pre-populated
+values for this option are a combination of some common Matrix events,
+and events which have been seen in the current session.  The suggested
+values may therefore change from one session to another.  Events which
+are not listed by default can be added manually.
+
+Refer to URL `https://spec.matrix.org/latest/client-server-api/#events'
+for information about Matrix events."
   :type `(choice (const :tag "All events" t)
                  (list :tag "Specified events"
                        (ement-events-checklist :inline t :greedy t)
