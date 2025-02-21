@@ -2729,9 +2729,11 @@ See also `ement-room-hide-reported-messages'."
   ;; Do all the things.
   (let ((user-id (ement-user-id (ement-event-sender event)))
         (room-id (ement-room-id room)))
+    (message "Ban user %s from room %s" user-id room-id)
+    (ement-room-ban-user user-id room-id session reason)
+    (message "Report and delete event %s" (ement-event-id event))
     (ement-room-report-content event room session reason -100)
-    (ement-room-delete-message event room session reason)
-    (ement-room-ban-user user-id room-id session reason)))
+    (ement-room-delete-message event room session reason)))
 
 (cl-defun ement-room-occur-select-messages (&key prompt user-id regexp pred header)
   "Invoke `ement-room-occur' and PROMPT user to select each message in turn.
@@ -2813,13 +2815,12 @@ See also `ement-room-hide-reported-messages'."
   ;; Do all the things.
   (let ((user-id (ement-user-id (ement-event-sender (car events))))
         (room-id (ement-room-id room)))
-    ;; (ement-room-ban-user user-id room-id session reason)
     (message "Ban user %s from room %s" user-id room-id)
+    (ement-room-ban-user user-id room-id session reason)
     (dolist (event events)
-      ;; (ement-room-report-content event room session reason -100)
-      ;; (ement-room-delete-message event room session reason)
       (message "Report and delete event %s" (ement-event-id event))
-      )))
+      (ement-room-report-content event room session reason -100)
+      (ement-room-delete-message event room session reason))))
 
 (defun ement-room-hide-message-content (&optional event)
   "Hide the content of the message at point, for the current session.
