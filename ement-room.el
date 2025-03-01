@@ -6471,10 +6471,10 @@ For use in `completion-at-point-functions'."
               ("u I" "Ignore user" ement-ignore-user)
               ""
               ("a r" "Report message" ement-room-report-content)
-              ("a k" "Kick user" ement-room-kick-user)
-              ("a b" "Ban user" ement-room-ban-user)
-              ("a B" "Unban user" ement-room-unban-user)
-              ("a C-k" "Select, report, delete, kick, ban" ement-room-report-delete-ban-selected)]]
+              (5 "a k" "Kick user" ement-room-kick-user)
+              (5 "a b" "Ban user" ement-room-ban-user)
+              (5 "a B" "Unban user" ement-room-unban-user)
+              (5 "a C-k" "Select, report, delete, kick, ban" ement-room-report-delete-ban-selected)]]
   [:pad-keys t
              ["Room"
               ("M-s o" "Occur search in room" ement-room-occur)
