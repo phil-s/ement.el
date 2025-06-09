@@ -870,7 +870,7 @@ Sets `ement-room-list-visibility-cache' to the value of
   (when ement-room-list--show-debug-messages
     (apply #'message args)))
 
-(defcustom ement-room-list-update-interval 5
+(defcustom ement-room-list-update-interval 1
   "Minimum seconds between `ement-room-list-auto-update' refreshes.
 If nil, then refresh immediately upon each sync.
 
@@ -878,7 +878,7 @@ In either case this is further subject to `ement-room-list-update-idle-delay'."
   :type '(choice (const :tag "Refresh immediately upon sync" nil)
                  (number :tag "Minimum seconds between refreshes")))
 
-(defcustom ement-room-list-update-idle-delay 1
+(defcustom ement-room-list-update-idle-delay nil
   "Necessary idle time before any `ement-room-list-auto-update' refresh.
 If nil, then refresh immediately."
   :type '(choice (const :tag "Refresh immediately" nil)
@@ -900,8 +900,11 @@ If nil, then refresh immediately."
 ;;;###autoload
 (defun ement-room-list-auto-update (&optional _session)
   "Automatically update the Taxy room list buffer.
-+Does so when variable `ement-room-list-auto-update' is non-nil.
-+To be called in `ement-sync-callback-hook'."
+
+Does so when variable `ement-room-list-auto-update' is non-nil, subject to
+`ement-room-list-update-interval' and `ement-room-list-update-idle-delay'.
+
+To be called in `ement-sync-callback-hook'."
   (when ement-room-list-auto-update
     (if (not ement-room-list-update-interval)
         (progn
