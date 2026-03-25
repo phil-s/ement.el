@@ -4981,12 +4981,15 @@ See also `ement-room-compose-method'."
 
 (defun ement-room-compose-buffer-string-trimmed ()
   "Like `buffer-string' trimmed with `string-trim'."
-  (buffer-substring-no-properties (progn (goto-char (point-min))
-                                         (skip-chars-forward " \t\r\n")
-                                         (point))
-                                  (progn (goto-char (point-max))
-                                         (skip-chars-backward " \t\r\n")
-                                         (point))))
+  (save-excursion
+    (save-restriction
+      (goto-char (point-min))
+      (skip-chars-forward " \t\r\n")
+      (narrow-to-region (point) (point-max))
+      (buffer-substring-no-properties
+       (point) (progn (goto-char (point-max))
+                      (skip-chars-backward " \t\r\n")
+                      (point))))))
 
 (defun ement-room-compose-send-prepare ()
   "Bindings for `ement-room-compose-send' and `ement-room-compose-send-direct'."
